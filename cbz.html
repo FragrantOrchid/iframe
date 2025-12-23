@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CBZ 预览器</title>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"
+      integrity="sha256-rMfkFFWoB2W1/Zx+4bgHim0WC7vKRVrq6FTeZclH1Z4="
+      crossorigin="anonymous"
+    ></script>
+    
+    <style>
+      body {
+        margin: 0;
+        background: #fafafa;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: #333;
+        position: absolute;
+        height: 100%;
+        width: 100%;
+        min-height: 800px;
+      }
+
+      #title {
+        width: 900px;
+        min-height: 18px;
+        margin: 10px auto;
+        text-align: center;
+        font-size: 16px;
+        color: #e2e2e2;
+        font-weight: 400;
+      }
+
+      #title:hover {
+        color: #777;
+      }
+
+      #viewer {
+        width: 900px;
+        height: 600px;
+        box-shadow: 0 0 4px #ccc;
+        border-radius: 5px;
+        padding: 0;
+        position: relative;
+        margin: 10px auto;
+        background: white center center no-repeat;
+        top: calc(50vh - 400px);
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      #viewer img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+
+      .arrow {
+        position: fixed;
+        top: 50%;
+        margin-top: -32px;
+        font-size: 64px;
+        color: #e2e2e2;
+        font-family: arial, sans-serif;
+        font-weight: bold;
+        cursor: pointer;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        user-select: none;
+        text-decoration: none;
+      }
+
+      .arrow:hover {
+        color: #777;
+      }
+
+      .arrow:active {
+        color: #000;
+      }
+
+      #prev {
+        left: 40px;
+      }
+
+      #next {
+        right: 40px;
+      }
+
+      #page-info {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 14px;
+      }
+
+      #loading {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 20px;
+        border-radius: 5px;
+        font-size: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="title">CBZ 预览器</div>
+    <div id="viewer"></div>
+    <a id="prev" href="#prev" class="arrow">‹</a>
+    <a id="next" href="#next" class="arrow">›</a>
+    <div id="page-info"></div>
+    <div id="loading" style="display: none;">加载中...</div>
+
+    <script>
+      // 获取URL参数
+      const params = new URLSearchParams(window.location.search);
+      const cbzUrl = params.get('url');
+      
+      if (!cbzUrl) {
+        alert('请通过URL参数指定CBZ文件，例如: ?url=yourfile.cbz');
+        throw new Error('缺少CBZ文件URL');
+      }
+
+      let images = [];
+      let currentPage = 0;
+      const viewer = document.getElementById('viewer');
+      const pageInfo = document.getElementById('page-info');
+      const loadingIndicator = document.getElementById('loading');
+
+      // 显示加载指示器
+      function showLoading() {
+        loadingIndicator.style.display = 'block';
+      }
+      
+      // 隐藏加载指示器
+      function hideLoading() {
+        loadingIndicator.style.display = 'none';
+      }
+
+      // 加载并显示CBZ文件
+      async function loadCBZ(url) {
+        showLoading();
+        
+        try {
+          // 获取CBZ文件
+          const response = await fetch(url);
+          const blob = await response.blob();
+          
+          // 使用JSZip解压
+          const zip = new JSZip();
+          const zipData = await zip.loadAsync(blob);
+          
+          // 获取所有图像文件并按文件名排序
+          images = [];
+          for (const [name, file] of Object.entries(zipData.files)) {
+            if (!file.dir && /\.(jpg|jpeg|png|gif|webp)$/i.test(name)) {
+              images.push({
+                name,
+                file
+              });
+            }
+          }
+          
+          // 按文件名排序
+          images.sort((a, b) => a.name.localeCompare(b.name));
+          
+          if (images.length === 0) {
+            throw new Error('CBZ文件中未找到图像文件');
+          }
+          
+          // 显示第一页
+          showPage(0);
+        } catch (error) {
+          console.error('加载CBZ文件失败:', error);
+          viewer.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
+        } finally {
+          hideLoading();
+        }
+      }
+      
+      // 显示指定页码的图像
+      async function showPage(pageIndex) {
+        if (pageIndex < 0 || pageIndex >= images.length) return;
+        
+        showLoading();
+        currentPage = pageIndex;
+        
+        try {
+          // 获取图像数据
+          const imageData = await images[pageIndex].file.async('blob');
+          const imageUrl = URL.createObjectURL(imageData);
+          
+          // 创建并显示图像
+          viewer.innerHTML = '';
+          const img = document.createElement('img');
+          img.src = imageUrl;
+          img.onload = () => URL.revokeObjectURL(imageUrl); // 释放内存
+          viewer.appendChild(img);
+          
+          // 更新页码信息
+          pageInfo.textContent = `${currentPage + 1} / ${images.length}`;
+          
+          // 更新箭头状态
+          document.getElementById('prev').style.visibility = currentPage === 0 ? 'hidden' : 'visible';
+          document.getElementById('next').style.visibility = currentPage === images.length - 1 ? 'hidden' : 'visible';
+        } catch (error) {
+          console.error('显示页面失败:', error);
+          viewer.innerHTML = `<p style="color: red;">显示页面失败: ${error.message}</p>`;
+        } finally {
+          hideLoading();
+        }
+      }
+      
+      // 初始化事件监听器
+      function initEventListeners() {
+        // 上一页按钮
+        document.getElementById('prev').addEventListener('click', (e) => {
+          e.preventDefault();
+          if (currentPage > 0) {
+            showPage(currentPage - 1);
+          }
+        });
+        
+        // 下一页按钮
+        document.getElementById('next').addEventListener('click', (e) => {
+          e.preventDefault();
+          if (currentPage < images.length - 1) {
+            showPage(currentPage + 1);
+          }
+        });
+        
+        // 键盘导航
+        document.addEventListener('keydown', (e) => {
+          switch (e.key) {
+            case 'ArrowLeft':
+              if (currentPage > 0) {
+                showPage(currentPage - 1);
+              }
+              break;
+            case 'ArrowRight':
+              if (currentPage < images.length - 1) {
+                showPage(currentPage + 1);
+              }
+              break;
+          }
+        });
+      }
+      
+      // 初始化
+      initEventListeners();
+      loadCBZ(cbzUrl);
+    </script>
+  </body>
+</html>
