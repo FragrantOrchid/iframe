@@ -133,12 +133,6 @@
         throw new Error('缺少CBZ文件URL');
       }
 
-      // 如果URL是http，自动替换为https
-      if (cbzUrl.startsWith('http://')) {
-        cbzUrl = cbzUrl.replace('http://', 'https://');
-        console.log('自动将HTTP URL替换为HTTPS:', cbzUrl);
-      }
-
       let images = [];
       let currentPage = 0;
       const viewer = document.getElementById('viewer');
